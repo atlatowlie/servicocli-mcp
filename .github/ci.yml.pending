@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Matrix on the LTS line we support. Adding more nodes is cheap;
+    # dropping back to 18 would require auditing fetch/undici behavior
+    # and is out of scope for v1.
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      # `npm ci` enforces that package-lock.json matches package.json
+      # exactly. If a maintainer edited package.json without re-running
+      # `npm install`, this fails — exactly the lockfile drift trap we
+      # want to catch in CI, not at publish time.
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Verify lockfile is unchanged after install
+        run: |
+          if [ -n "$(git status --porcelain package-lock.json)" ]; then
+            echo "::error::package-lock.json drifted after npm ci — commit the updated lockfile."
+            git diff package-lock.json
+            exit 1
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      # Block known-high vulnerabilities at PR time. Lower severities
+      # surface in the npm audit table but don't fail the build —
+      # tuning this threshold is a maintenance decision, not a build
+      # decision.
+      - name: Audit (high+)
+        run: npm run audit:high
+
+      # Sanity-check the published surface so nothing accidentally
+      # included in `files` ends up shipped. The dry-run output lists
+      # every file going into the tarball — eyeball it in CI logs.
+      - name: Pack dry run
+        run: npm run pack:check

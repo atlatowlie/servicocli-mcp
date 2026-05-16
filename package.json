@@ -1,0 +1,58 @@
+{
+  "name": "@atlatowlie/servicocli-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP server exposing the Servico CRM tenant API (api/v1) as typed tool calls for LLM agents like Claude Desktop and Cursor.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "servicocli-mcp": "bin/servicocli-mcp.js"
+  },
+  "main": "src/server.js",
+  "exports": {
+    ".": "./src/server.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "scripts": {
+    "start": "node bin/servicocli-mcp.js",
+    "test": "node --test 'test/**/*.test.js'",
+    "lint": "eslint .",
+    "audit:high": "npm audit --audit-level=high",
+    "pack:check": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "undici": "8.3.0"
+  },
+  "devDependencies": {
+    "eslint": "10.4.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "servico",
+    "servicocrm",
+    "claude",
+    "cursor",
+    "llm-tools"
+  ],
+  "homepage": "https://github.com/atlatowlie/servicocli-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atlatowlie/servicocli-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/atlatowlie/servicocli-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
