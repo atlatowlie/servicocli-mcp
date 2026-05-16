@@ -20,13 +20,13 @@
   ],
   "scripts": {
     "start": "node bin/servicocli-mcp.js",
-    "test": "node --test 'test/**/*.test.js'",
+    "test": "node --test test/*.test.js",
     "lint": "eslint .",
     "audit:high": "npm audit --audit-level=high",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
