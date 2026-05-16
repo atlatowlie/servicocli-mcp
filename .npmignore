@@ -1,0 +1,34 @@
+# Only the files in package.json#files are published, but .npmignore
+# is a belt-and-braces filter in case `files` is loosened later. The
+# rule: nothing test-related, CI-related, or developer-only ever ships.
+
+# Tests
+test/
+*.test.js
+
+# CI / dev tooling
+.github/
+.eslintrc*
+eslint.config.*
+.nvmrc
+.gitignore
+
+# Source control
+.git/
+.gitattributes
+
+# IDE / OS junk
+.idea/
+.vscode/
+.DS_Store
+
+# Build artifacts / local
+node_modules/
+coverage/
+*.tgz
+.env
+.env.*
+
+# Lockfile — applications need it but library consumers don't, and it
+# inflates the tarball. (npm-published packages traditionally omit it.)
+package-lock.json
