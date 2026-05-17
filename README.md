@@ -11,7 +11,7 @@ It runs on your machine as a subprocess of the agent. Your Servico API key never
 You don't have to clone or build anything — `npx` runs the latest published version:
 
 ```bash
-npx -y @atlatowlie/servicocli-mcp
+npx -y @servicocrm/servicocli-mcp
 ```
 
 It will exit immediately if `SERVICO_API_KEY` is not set; the agent's spawn config supplies it (see below).
@@ -38,7 +38,7 @@ Edit `claude_desktop_config.json` (see [Anthropic's docs](https://modelcontextpr
   "mcpServers": {
     "servico": {
       "command": "npx",
-      "args": ["-y", "@atlatowlie/servicocli-mcp"],
+      "args": ["-y", "@servicocrm/servicocli-mcp"],
       "env": {
         "SERVICO_API_KEY": "sk_live_REPLACE_ME"
       }
@@ -58,7 +58,7 @@ Edit `~/.cursor/mcp.json` (or **Cursor Settings → MCP**):
   "mcpServers": {
     "servico": {
       "command": "npx",
-      "args": ["-y", "@atlatowlie/servicocli-mcp"],
+      "args": ["-y", "@servicocrm/servicocli-mcp"],
       "env": {
         "SERVICO_API_KEY": "sk_live_REPLACE_ME"
       }
