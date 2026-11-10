@@ -40,6 +40,7 @@ import { tools as productTools } from './tools/products.js';
 import { tools as quoteTools } from './tools/quotes.js';
 import { tools as invoiceTools } from './tools/invoices.js';
 import { tools as contextTools } from './tools/context.js';
+import { tools as supplierTools } from './tools/suppliers.js';
 import { tools as jobTools } from './tools/jobs.js';
 import { tools as formTools } from './tools/forms.js';
 
@@ -65,7 +66,7 @@ function readVersion() {
 export function buildRegistry() {
   const groups = [
     customerTools, productTools, quoteTools,
-    invoiceTools, jobTools, formTools, contextTools,
+    invoiceTools, jobTools, formTools, contextTools, supplierTools,
   ];
   const registry = new Map();
   for (const group of groups) {
@@ -86,8 +87,13 @@ export function buildRegistry() {
  */
 export function visibleTools(registry, context) {
   return Array.from(registry.values()).filter(tool => {
-    if (tool.reference) return context?.scopes?.includes(tool.scope);
-    return !context?.reference_only || !tool.scope;
+    if (!tool.scope) return true;
+    const scopes = context?.scopes || [];
+    if (tool.reference) return scopes.includes(tool.scope);
+    if (context?.reference_only) return false;
+    return scopes.includes(tool.scope) || scopes.includes('*') ||
+      scopes.includes(tool.scope.split(':')[0] + ':*') ||
+      (tool.scope.endsWith(':read') && scopes.includes('read'));
   });
 }
 
