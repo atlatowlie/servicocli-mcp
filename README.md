@@ -90,6 +90,11 @@ Restart Cursor.
 | `get_invoice` | Fetch one invoice. | `invoices:read` |
 | `list_jobs_references` | Page through job references. | `jobs:read` and Expense Management |
 | `list_suppliers_references` | Page through supplier references. | `suppliers:read` and Expense Management |
+| `list_job_expenses` | List job expenses. | `expenses:read` |
+| `create_job_expense` | Create a job expense. | `expenses:write` |
+| `list_expense_payments` | List recorded payments on a job expense. | `expenses:read` |
+| `record_expense_payment` | Record a payment already made on a job expense. | `expenses:write` |
+| `refund_expense_payment` | Record a refund against an existing expense payment. | `expenses:write` |
 | `list_suppliers` | List active suppliers and order contacts. | `suppliers:read` |
 | `create_supplier` | Create a supplier. | `suppliers:write` |
 | `replace_supplier` | Replace supplier details. | `suppliers:write` |
