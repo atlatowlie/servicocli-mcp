@@ -1,6 +1,6 @@
 {
   "name": "@servicocrm/servicocli-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local MCP server exposing the Servico CRM tenant API (api/v1) as typed tool calls for LLM agents like Claude Desktop and Cursor.",
   "license": "MIT",
   "type": "module",

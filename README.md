@@ -88,6 +88,9 @@ Restart Cursor.
 | `get_quote_line_items` | Line items for a quote. | `quotes:read` |
 | `list_invoices` | Paginate invoices. | `invoices:read` |
 | `get_invoice` | Fetch one invoice. | `invoices:read` |
+| `list_jobs_references` | Page through job references. | `jobs:references:read` |
+| `list_suppliers_references` | Page through supplier references. | `suppliers:references:read` |
+| `get_api_context` | Read tenant identity and authorization context. | Authenticated key |
 | `list_jobs` | Paginate jobs. | `jobs:read` |
 | `get_job` | Fetch one job. | `jobs:read` |
 | `list_forms` | Paginate form templates. | `forms:read` |
@@ -95,7 +98,7 @@ Restart Cursor.
 | `list_form_responses` | Paginate responses for a template. | `forms:read` |
 | `submit_form` | Submit a new form response. | `forms:write` |
 
-**Pagination** works the same on every list tool: pass `limit` (1-100, default 25) and the `next_cursor` from the previous page's response.
+**Pagination** for standard list tools accepts `limit` (1-100, default 25) and the `next_cursor` from the previous page's response. Reference lists accept 1–200 records (default 100). Keep the last complete catalog until the new snapshot reaches a null cursor. If a cursor expires, restart at the first page.
 
 **Writes** auto-generate an idempotency key (UUID v4) if you don't pass one. To re-try safely or to dedupe across retries, supply `idempotency_key` yourself.
 
