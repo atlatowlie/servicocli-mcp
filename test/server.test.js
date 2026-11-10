@@ -25,7 +25,7 @@ test('buildRegistry: gathers all tools from every module', () => {
     assert.ok(reg.has(name), `missing tool: ${name}`);
   }
   // Total tool count — keep this in sync with README's tool table.
-  assert.equal(reg.size, 26, 'expected 26 tools registered');
+  assert.equal(reg.size, 31, 'expected 31 tools registered');
 });
 
 test('buildRegistry: every tool has the required shape', () => {
@@ -80,5 +80,24 @@ test('ordinary supplier and job grants expose the matching operations', async ()
     assert.equal(recorded.method, method);
     assert.equal(recorded.url, '/api/v1' + path);
     if (method !== 'GET') assert.ok(recorded.headers['idempotency-key']);
+  }
+});
+
+test('expense tools require an explicit scope and send writes with a stable retry key', async () => {
+  const registry = buildRegistry();
+  const names = scopes => visibleTools(registry, {scopes}).map(tool => tool.name);
+  assert.ok(!names(['read','jobs:write']).includes('list_job_expenses'));
+  assert.ok(!names(['expenses:read']).includes('record_expense_payment'));
+  const idem = 'expense-payment-test-001';
+  for (const [name, args, url] of [
+    ['create_job_expense',{job_id:'j',description:'Sample',amount:100},'/jobs/j/expenses'],
+    ['record_expense_payment',{expense_id:'e',amount:30,payment_method:'cash'},'/expenses/e/payments'],
+    ['refund_expense_payment',{expense_id:'e',payment_id:'p',amount:10},'/expenses/e/payments/p/refund'],
+  ]) {
+    const {recorded} = await callTool(registry.get(name), {...args,idempotency_key:idem});
+    assert.equal(recorded.url, '/api/v1' + url);
+    assert.equal(recorded.method, 'POST');
+    assert.equal(recorded.headers['idempotency-key'], idem);
+    assert.equal(recorded.body.amount, args.amount);
   }
 });
