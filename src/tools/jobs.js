@@ -1,12 +1,4 @@
-/**
- * tools/jobs.js — read-only job tools.
- *
- * Jobs are read-only in v1. Job creation involves complex workflow state
- * (scheduling, assignment, sub-status transitions) that isn't yet
- * productised on the public API.
- *
- * Scope: jobs:read
- */
+import { randomUUID } from 'node:crypto';
 
 import { apiRequest } from '../apiClient.js';
 
@@ -15,7 +7,7 @@ export const tools = [
     name: 'list_jobs',
     description:
       'List jobs (paginated). Includes title, address, status, sub_status, ' +
-      'assigned rep id, and end_date. Read-only in v1.',
+      'assigned rep id, and end_date. Use update_job to edit permitted fields.',
     scope: 'jobs:read',
     inputSchema: {
       type: 'object',
@@ -51,6 +43,23 @@ export const tools = [
         method: 'GET',
         path: `/jobs/${encodeURIComponent(args.id)}`,
       });
+    },
+  },
+  {
+    name: 'update_job',
+    description: 'Update the supplied fields on an existing job.',
+    scope: 'jobs:write',
+    inputSchema: {
+      type: 'object', additionalProperties: false, required: ['id', 'changes'],
+      properties: {
+        id: { type: 'string', minLength: 1 },
+        changes: { type: 'object', minProperties: 1, description: 'Job fields accepted by PATCH /jobs/{id}, such as title, address, or status.' },
+        idempotency_key: { type: 'string', minLength: 16, maxLength: 64 },
+      },
+    },
+    handler({ id, changes, idempotency_key = randomUUID() }) {
+      return apiRequest({ method: 'PATCH', path: '/jobs/' + encodeURIComponent(id), body: changes,
+        headers: { 'Idempotency-Key': idempotency_key } });
     },
   },
 ];

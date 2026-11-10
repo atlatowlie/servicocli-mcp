@@ -25,7 +25,7 @@ test('buildRegistry: gathers all tools from every module', () => {
     assert.ok(reg.has(name), `missing tool: ${name}`);
   }
   // Total tool count — keep this in sync with README's tool table.
-  assert.equal(reg.size, 22, 'expected 22 tools registered');
+  assert.equal(reg.size, 26, 'expected 26 tools registered');
 });
 
 test('buildRegistry: every tool has the required shape', () => {
@@ -62,4 +62,23 @@ test('tool discovery follows the reference grants returned by Servico', () => {
   const legacy = visibleTools(buildRegistry(), { scopes: ['read'] });
   assert.ok(legacy.some(tool => tool.name === 'list_jobs'));
   assert.ok(!legacy.some(tool => tool.reference));
+});
+
+test('ordinary supplier and job grants expose the matching operations', async () => {
+  const registry = buildRegistry();
+  const names = scopes => visibleTools(registry, { scopes }).map(tool => tool.name);
+  assert.ok(names(['suppliers:read']).includes('list_suppliers'));
+  assert.ok(!names(['suppliers:read']).includes('create_supplier'));
+  assert.ok(names(['jobs:write']).includes('update_job'));
+  for (const [name, method, args, path] of [
+    ['list_suppliers','GET',{},'/suppliers'],
+    ['create_supplier','POST',{ company_name:'Test', status:'active' },'/suppliers'],
+    ['replace_supplier','PUT',{ id:'s1', company_name:'New name' },'/suppliers/s1'],
+    ['update_job','PATCH',{ id:'j1', changes:{ title:'New title' } },'/jobs/j1'],
+  ]) {
+    const { recorded } = await callTool(registry.get(name), args);
+    assert.equal(recorded.method, method);
+    assert.equal(recorded.url, '/api/v1' + path);
+    if (method !== 'GET') assert.ok(recorded.headers['idempotency-key']);
+  }
 });

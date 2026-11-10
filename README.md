@@ -88,8 +88,12 @@ Restart Cursor.
 | `get_quote_line_items` | Line items for a quote. | `quotes:read` |
 | `list_invoices` | Paginate invoices. | `invoices:read` |
 | `get_invoice` | Fetch one invoice. | `invoices:read` |
-| `list_jobs_references` | Page through job references. | `jobs:references:read` |
-| `list_suppliers_references` | Page through supplier references. | `suppliers:references:read` |
+| `list_jobs_references` | Page through job references. | `jobs:read` and Expense Management |
+| `list_suppliers_references` | Page through supplier references. | `suppliers:read` and Expense Management |
+| `list_suppliers` | List active suppliers and order contacts. | `suppliers:read` |
+| `create_supplier` | Create a supplier. | `suppliers:write` |
+| `replace_supplier` | Replace supplier details. | `suppliers:write` |
+| `update_job` | Update fields on an existing job. | `jobs:write` |
 | `get_api_context` | Read tenant identity and authorization context. | Authenticated key |
 | `list_jobs` | Paginate jobs. | `jobs:read` |
 | `get_job` | Fetch one job. | `jobs:read` |
