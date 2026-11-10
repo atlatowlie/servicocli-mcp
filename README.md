@@ -94,6 +94,7 @@ Restart Cursor.
 | `list_expense_attachments` | List filenames, IDs and original fingerprints. | `expenses:read` |
 | `download_expense_attachment` | Read a receipt as base64, up to 10 MiB. | `expenses:read` |
 | `upload_expense_attachment` | Attach a PDF or image from base64, up to 10 MiB. | `expenses:write` |
+| `list_expense_references` | Page through a stable expense snapshot; filter by invoice number, issuer ID or job ID. | `expenses:read` |
 | `list_job_expenses` | List job expenses. | `expenses:read` |
 | `create_job_expense` | Create a job expense. | `expenses:write` |
 | `list_expense_payments` | List recorded payments on a job expense. | `expenses:read` |
