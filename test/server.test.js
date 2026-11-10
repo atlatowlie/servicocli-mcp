@@ -8,7 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildRegistry } from '../src/server.js';
+import { callTool } from './_helpers.js';
+import { buildRegistry, visibleTools } from '../src/server.js';
 
 test('buildRegistry: gathers all tools from every module', () => {
   const reg = buildRegistry();
@@ -24,7 +25,7 @@ test('buildRegistry: gathers all tools from every module', () => {
     assert.ok(reg.has(name), `missing tool: ${name}`);
   }
   // Total tool count — keep this in sync with README's tool table.
-  assert.equal(reg.size, 19, 'expected 19 tools registered');
+  assert.equal(reg.size, 22, 'expected 22 tools registered');
 });
 
 test('buildRegistry: every tool has the required shape', () => {
@@ -35,6 +36,30 @@ test('buildRegistry: every tool has the required shape', () => {
     assert.equal(typeof tool.handler, 'function');
     assert.ok(tool.inputSchema && tool.inputSchema.type === 'object',
       `${name}: missing/invalid inputSchema`);
-    assert.ok(tool.scope, `${name}: every tool must declare its scope`);
+    assert.ok(tool.scope || (name === 'get_api_context' && tool.scope === null), `${name}: every tool must declare its scope`);
   }
+});
+
+test('get_api_context reads the authenticated key identity', async () => {
+  const { recorded } = await callTool(buildRegistry().get('get_api_context'), {});
+  assert.equal(recorded.method, 'GET');
+  assert.equal(recorded.url, '/api/v1/me');
+});
+
+for (const resource of ['jobs', 'suppliers']) {
+  test('list reference pages for ' + resource, async () => {
+    const tool = buildRegistry().get('list_' + resource + '_references');
+    const { recorded } = await callTool(tool, { limit: 2, cursor: 'opaque' });
+    const url = new URL(recorded.url, 'https://localhost');
+    assert.equal(url.pathname, '/api/v1/' + resource);
+    assert.deepEqual(Object.fromEntries(url.searchParams), { view: 'references', limit: '2', cursor: 'opaque' });
+  });
+}
+
+test('tool discovery follows the reference grants returned by Servico', () => {
+  const keys = visibleTools(buildRegistry(), { reference_only: true, scopes: ['jobs:references:read'] });
+  assert.deepEqual(keys.map(tool => tool.name), ['get_api_context', 'list_jobs_references']);
+  const legacy = visibleTools(buildRegistry(), { scopes: ['read'] });
+  assert.ok(legacy.some(tool => tool.name === 'list_jobs'));
+  assert.ok(!legacy.some(tool => tool.reference));
 });

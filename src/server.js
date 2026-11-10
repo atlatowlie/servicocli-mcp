@@ -39,6 +39,7 @@ import { tools as customerTools } from './tools/customers.js';
 import { tools as productTools } from './tools/products.js';
 import { tools as quoteTools } from './tools/quotes.js';
 import { tools as invoiceTools } from './tools/invoices.js';
+import { tools as contextTools } from './tools/context.js';
 import { tools as jobTools } from './tools/jobs.js';
 import { tools as formTools } from './tools/forms.js';
 
@@ -64,7 +65,7 @@ function readVersion() {
 export function buildRegistry() {
   const groups = [
     customerTools, productTools, quoteTools,
-    invoiceTools, jobTools, formTools,
+    invoiceTools, jobTools, formTools, contextTools,
   ];
   const registry = new Map();
   for (const group of groups) {
@@ -83,6 +84,13 @@ export function buildRegistry() {
  * for tests so they can drive the dispatcher without spinning a
  * transport.
  */
+export function visibleTools(registry, context) {
+  return Array.from(registry.values()).filter(tool => {
+    if (tool.reference) return context?.scopes?.includes(tool.scope);
+    return !context?.reference_only || !tool.scope;
+  });
+}
+
 export function createServer({ registry } = {}) {
   const reg = registry || buildRegistry();
   const server = new Server(
@@ -98,8 +106,10 @@ export function createServer({ registry } = {}) {
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const context = await reg.get('get_api_context')?.handler();
+    const available = visibleTools(reg, context?.data);
     return {
-      tools: Array.from(reg.values()).map((t) => ({
+      tools: available.map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
