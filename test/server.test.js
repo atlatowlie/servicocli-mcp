@@ -25,7 +25,7 @@ test('buildRegistry: gathers all tools from every module', () => {
     assert.ok(reg.has(name), `missing tool: ${name}`);
   }
   // Total tool count — keep this in sync with README's tool table.
-  assert.equal(reg.size, 31, 'expected 31 tools registered');
+  assert.equal(reg.size, 35, 'expected 35 tools registered');
 });
 
 test('buildRegistry: every tool has the required shape', () => {
