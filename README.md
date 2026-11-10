@@ -90,6 +90,10 @@ Restart Cursor.
 | `get_invoice` | Fetch one invoice. | `invoices:read` |
 | `list_jobs_references` | Page through job references. | `jobs:read` and Expense Management |
 | `list_suppliers_references` | Page through supplier references. | `suppliers:read` and Expense Management |
+| `list_contractor_directory` | List contractor IDs, names and maintained aliases. | `expenses:read` and contractor visibility |
+| `list_expense_attachments` | List filenames, IDs and original fingerprints. | `expenses:read` |
+| `download_expense_attachment` | Read a receipt as base64, up to 10 MiB. | `expenses:read` |
+| `upload_expense_attachment` | Attach a PDF or image from base64, up to 10 MiB. | `expenses:write` |
 | `list_job_expenses` | List job expenses. | `expenses:read` |
 | `create_job_expense` | Create a job expense. | `expenses:write` |
 | `list_expense_payments` | List recorded payments on a job expense. | `expenses:read` |

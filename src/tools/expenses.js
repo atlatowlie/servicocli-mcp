@@ -1,10 +1,14 @@
+import { Blob } from 'node:buffer';
 import { apiRequest } from '../apiClient.js';
+
+import { FormData } from 'undici';
 
 const text = { type: 'string' };
 const date = { type: 'string', format: 'date' };
 const fields = {
+  file_id: text, filename: text, content_base64: { type: 'string', maxLength: 13981016 },
   job_id: text, expense_id: text, payment_id: text, description: text, amount: { type: 'number' },
-  vendor: text, supplier_id: text, expense_date: date, payment_status: { enum: ['unpaid', 'pending'] },
+  vendor: text, supplier_id: text, contractor_id: text, invoice_number: text, invoice_date: date, expense_date: date, payment_status: { enum: ['unpaid', 'pending'] },
   payment_method: text, payment_date: date, reference_number: text, notes: text,
   idempotency_key: { type: 'string', pattern: '^[A-Za-z0-9_-]{16,64}$', description: 'Reuse this key when retrying the same entry.' },
 };
@@ -14,7 +18,40 @@ function schema(names, required) {
     properties: Object.fromEntries(names.map(name => [name, fields[name]])) };
 }
 
+const attachments = id => '/expenses/' + encodeURIComponent(id) + '/attachments';
+
 export const tools = [
+  {
+    name: 'list_contractor_directory', description: 'List contractor IDs, names and maintained invoice aliases.',
+    scope: 'expenses:read', explicitScope: true,
+    inputSchema: { type: 'object', additionalProperties: false, properties: { limit: { type: 'integer', minimum: 1 }, offset: { type: 'integer', minimum: 0 } } },
+    handler(query) { return apiRequest({ method: 'GET', path: '/contractors', query }); },
+  },
+  {
+    name: 'list_expense_attachments', description: 'List receipt filenames, IDs and original SHA-256 fingerprints.',
+    scope: 'expenses:read', explicitScope: true, inputSchema: schema(['expense_id'], ['expense_id']),
+    handler({ expense_id }) { return apiRequest({ method: 'GET', path: attachments(expense_id) }); },
+  },
+  {
+    name: 'download_expense_attachment', description: 'Read a receipt as base64 (up to 10 MiB).',
+    scope: 'expenses:read', explicitScope: true, inputSchema: schema(['expense_id','file_id'], ['expense_id','file_id']),
+    handler({ expense_id, file_id }) {
+      return apiRequest({ method: 'GET', path: attachments(expense_id) + '/' + encodeURIComponent(file_id), binary: true });
+    },
+  },
+  {
+    name: 'upload_expense_attachment', description: 'Attach an original PDF or image to an expense (up to 10 MiB).',
+    scope: 'expenses:write', explicitScope: true,
+    inputSchema: schema(['expense_id','filename','content_base64'], ['expense_id','filename','content_base64']),
+    handler({ expense_id, filename, content_base64 }) {
+      if (content_base64.length > 13981016) throw new Error('Attachment exceeds the 10 MiB MCP transfer limit.');
+      const bytes = Buffer.from(content_base64, 'base64');
+      if (bytes.length > 10 * 1024 * 1024 || bytes.toString('base64') !== content_base64) throw new Error('Invalid attachment data.');
+      const body = new FormData();
+      body.append('file', new Blob([bytes]), filename);
+      return apiRequest({ method: 'POST', path: attachments(expense_id), body });
+    },
+  },
   {
     name: 'list_job_expenses',
     description: 'List job expenses.',
@@ -30,7 +67,7 @@ export const tools = [
     description: 'Create a job expense.',
     scope: 'expenses:write',
     explicitScope: true,
-    inputSchema: schema(["job_id","description","amount","vendor","supplier_id","expense_date","payment_status","idempotency_key"], ["job_id","description","amount","idempotency_key"]),
+    inputSchema: schema(["job_id","description","amount","vendor","supplier_id","contractor_id","invoice_number","invoice_date","expense_date","payment_status","idempotency_key"], ["job_id","description","amount","idempotency_key"]),
     handler({ job_id, idempotency_key, ...body }) {
       return apiRequest({ method: 'POST', path: '/jobs/' + encodeURIComponent(job_id) + '/expenses', body, headers: { 'Idempotency-Key': idempotency_key } });
     },

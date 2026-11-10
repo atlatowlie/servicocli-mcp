@@ -23,7 +23,7 @@
  * with a clear message instead of getting an opaque 401.
  */
 
-import { fetch, Agent } from 'undici';
+import { fetch, Agent, FormData } from 'undici';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -185,6 +185,7 @@ export async function apiRequest({
   query,
   body,
   headers,
+  binary = false,
   env = process.env,
 }) {
   if (!method || !path) {
@@ -218,7 +219,12 @@ export async function apiRequest({
     signal: AbortSignal.timeout(timeoutMs + 5_000),
   };
   if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
-    init.body = JSON.stringify(body);
+    if (body instanceof FormData) {
+      delete init.headers['Content-Type'];
+      init.body = body;
+    } else {
+      init.body = JSON.stringify(body);
+    }
   }
 
   let res;
@@ -249,6 +255,16 @@ export async function apiRequest({
   // portal, proxy error page, or a misconfigured base URL pointing at the
   // marketing site. Surface it rather than try to parse HTML.
   const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (binary && res.ok && (ct.startsWith('image/') || ct === 'application/pdf' || ct === 'application/octet-stream')) {
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of res.body) {
+      size += chunk.length;
+      if (size > 10 * 1024 * 1024) throw new Error('Attachment exceeds the 10 MiB MCP transfer limit.');
+      chunks.push(chunk);
+    }
+    return { mime_type: ct, content_base64: Buffer.concat(chunks).toString('base64') };
+  }
   if (!ct.includes('application/json')) {
     let snippet = '';
     try { snippet = (await res.text()).slice(0, 200); } catch { /* ignore */ }
