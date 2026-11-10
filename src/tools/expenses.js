@@ -6,7 +6,7 @@ import { FormData } from 'undici';
 const text = { type: 'string' };
 const date = { type: 'string', format: 'date' };
 const fields = {
-  file_id: text, filename: text, content_base64: { type: 'string', maxLength: 13981016 },
+  derived_from_file_id: text, file_id: text, filename: text, content_base64: { type: 'string', maxLength: 13981016 },
   job_id: text, expense_id: text, payment_id: text, description: text, amount: { type: 'number' },
   vendor: text, supplier_id: text, contractor_id: text, invoice_number: text, invoice_date: date, expense_date: date, payment_status: { enum: ['unpaid', 'pending'] },
   payment_method: text, payment_date: date, reference_number: text, notes: text,
@@ -21,6 +21,15 @@ function schema(names, required) {
 const attachments = id => '/expenses/' + encodeURIComponent(id) + '/attachments';
 
 export const tools = [
+  {
+    name: 'list_expense_references', description: 'Retrieve invoice identity, job and revision IDs. Repeat the filters with each snapshot cursor.',
+    scope: 'expenses:read', explicitScope: true,
+    inputSchema: { type: 'object', additionalProperties: false, properties: {
+      invoice_number: text, supplier_id: text, contractor_id: text, job_id: text, cursor: text,
+      limit: { type: 'integer', minimum: 1, maximum: 200 }
+    } },
+    handler(query) { return apiRequest({ method: 'GET', path: '/expenses', query }); },
+  },
   {
     name: 'list_contractor_directory', description: 'List contractor IDs, names and maintained invoice aliases.',
     scope: 'expenses:read', explicitScope: true,
@@ -42,12 +51,13 @@ export const tools = [
   {
     name: 'upload_expense_attachment', description: 'Attach an original PDF or image to an expense (up to 10 MiB).',
     scope: 'expenses:write', explicitScope: true,
-    inputSchema: schema(['expense_id','filename','content_base64'], ['expense_id','filename','content_base64']),
-    handler({ expense_id, filename, content_base64 }) {
+    inputSchema: schema(['expense_id','filename','content_base64','derived_from_file_id'], ['expense_id','filename','content_base64']),
+    handler({ expense_id, filename, content_base64, derived_from_file_id }) {
       if (content_base64.length > 13981016) throw new Error('Attachment exceeds the 10 MiB MCP transfer limit.');
       const bytes = Buffer.from(content_base64, 'base64');
       if (bytes.length > 10 * 1024 * 1024 || bytes.toString('base64') !== content_base64) throw new Error('Invalid attachment data.');
       const body = new FormData();
+      if (derived_from_file_id) body.append('derived_from_file_id', derived_from_file_id);
       body.append('file', new Blob([bytes]), filename);
       return apiRequest({ method: 'POST', path: attachments(expense_id), body });
     },
