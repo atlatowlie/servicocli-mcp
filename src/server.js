@@ -8,7 +8,9 @@
  *
  * Tool dispatch:
  *   - Each tools/*.js exports an array of { name, description, scope,
- *     inputSchema, handler }.
+ *     inputSchema, handler }. handler(args, ctx): ctx.confirm(message)
+ *     asks the person through MCP elicitation (tools marked
+ *     requiresHumanConfirmation use it).
  *   - On ListTools, we project { name, description, inputSchema } so the
  *     LLM sees what it can do without us leaking internal scope wiring.
  *   - On CallTool, we look up the handler, await it, and serialize the
@@ -44,6 +46,13 @@ import { tools as expenseTools } from './tools/expenses.js';
 import { tools as supplierTools } from './tools/suppliers.js';
 import { tools as jobTools } from './tools/jobs.js';
 import { tools as formTools } from './tools/forms.js';
+import { tools as scheduleTools } from './tools/schedule.js';
+import { tools as taskTools } from './tools/tasks.js';
+import { tools as timeBlockTools } from './tools/timeBlocks.js';
+import { tools as meetingTools } from './tools/meetings.js';
+import { tools as userTools } from './tools/users.js';
+import { tools as catalogueTools } from './tools/catalogue.js';
+import { tools as approvalTools } from './tools/approvals.js';
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -68,6 +77,8 @@ export function buildRegistry() {
   const groups = [
     customerTools, productTools, quoteTools,
     invoiceTools, jobTools, formTools, contextTools, supplierTools, expenseTools,
+    scheduleTools, taskTools, timeBlockTools, meetingTools, userTools, catalogueTools,
+    approvalTools,
   ];
   const registry = new Map();
   for (const group of groups) {
@@ -92,10 +103,50 @@ export function visibleTools(registry, context) {
     const scopes = context?.scopes || [];
     if (tool.reference || tool.explicitScope) return scopes.includes(tool.scope);
     if (context?.reference_only) return false;
-    return scopes.includes(tool.scope) || scopes.includes('*') ||
-      scopes.includes(tool.scope.split(':')[0] + ':*') ||
-      (tool.scope.endsWith(':read') && scopes.includes('read'));
+    // `alsoScopes`: other grants the API accepts for the same route (for
+    // example tasks:write is the legacy twin of tasks:create).
+    return [tool.scope, ...(tool.alsoScopes || [])].some(scope =>
+      scopes.includes(scope) || scopes.includes('*') ||
+      scopes.includes(scope.split(':')[0] + ':*') ||
+      (scope.endsWith(':read') && scopes.includes('read')));
   });
+}
+
+const CONFIRM_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * The handler context for tools that need a person in the loop. `confirm`
+ * asks the human through the MCP client's elicitation prompt and resolves
+ * true only when they accept AND answer yes. A client without form
+ * elicitation, a decline, a cancel, a "no", a timeout or any error all
+ * resolve false: the caller must then make no API call.
+ */
+export function makeToolContext(server) {
+  return {
+    async confirm(message) {
+      if (!server.getClientCapabilities()?.elicitation?.form) return false;
+      try {
+        const res = await server.elicitInput({
+          message,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              confirm: {
+                type: 'boolean',
+                title: 'Confirm',
+                description: 'Yes to go ahead, no to cancel.',
+                default: false,
+              },
+            },
+            required: ['confirm'],
+          },
+        }, { timeout: CONFIRM_TIMEOUT_MS });
+        return res.action === 'accept' && res.content?.confirm === true;
+      } catch {
+        return false;
+      }
+    },
+  };
 }
 
 const CONTEXT_CACHE_MS = 60_000;
@@ -150,6 +201,8 @@ export function createServer({ registry } = {}) {
     };
   });
 
+  const toolContext = makeToolContext(server);
+
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
     const tool = reg.get(name);
@@ -163,7 +216,7 @@ export function createServer({ registry } = {}) {
       };
     }
     try {
-      const result = await tool.handler(args || {});
+      const result = await tool.handler(args || {}, toolContext);
       return {
         content: [{
           type: 'text',

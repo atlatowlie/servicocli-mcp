@@ -109,12 +109,46 @@ Restart Cursor.
 | `get_api_context` | Read tenant identity and authorization context. | Authenticated key |
 | `list_jobs` | Paginate jobs. | `jobs:read` |
 | `get_job` | Fetch one job. | `jobs:read` |
+| `list_invoice_payments` | List the payments on an invoice. | `payments:read` |
+| `get_invoice_payment` | Fetch one payment on an invoice. | `payments:read` |
+| `set_job_status` | Move a job's status through Servico's status rules. | `jobs:write` |
+| `list_job_files` | List a job's files (photos, videos, documents). | `jobs:read` |
+| `upload_job_file` | Upload one local file (up to 500 MiB) to a job. | `jobs:write` |
+| `list_job_arrivals` | List "arrived" records on a job. | `jobs:read` |
+| `record_job_arrival` | Record the bound user's arrival at a job. | `jobs:write` |
+| `list_job_selections` | What a job still needs chosen (slots, unmapped lines). | `selections:read` |
+| `get_schedule` | Tasks starting in a date range (max 62 days). | `schedule:read` |
+| `get_job_schedule` | One job's schedule, arrival windows and conflicts. | `schedule:read` |
+| `reschedule_task` | Change one task's start, duration, due date or arrival window. | `schedule:write` |
+| `list_tasks` | Paginate project tasks; filter by job, status, assignee. | `tasks:read` |
+| `get_task` | Fetch one project task. | `tasks:read` |
+| `create_task` | Create a task on a job. | `tasks:create` (or legacy `tasks:write`) |
+| `update_task` | Update fields on a task. | `tasks:create` (or legacy `tasks:write`) |
+| `list_time_blocks` | Paginate time blocks (time off / busy time). | `time_blocks:read` |
+| `get_time_block` | Fetch one time block. | `time_blocks:read` |
+| `create_time_block` | Put a time block on a user's calendar. | `time_blocks:write` |
+| `update_time_block` | Change a time block. | `time_blocks:write` |
+| `list_meetings` | Paginate meetings; filter by job and date window. | `meetings:read` |
+| `get_meeting` | Fetch one meeting. | `meetings:read` |
+| `create_job_meeting` | Book a meeting on a job. | `meetings:write` |
+| `get_availability` | Free slots for one rep on one day. | `meetings:read` |
+| `list_users` | List active staff (id, name, email, phone, role). | `users:read` |
+| `list_catalogue_products` | Search the selections catalogue of supplier products. | `catalogue:read` |
+| `list_approvals` | List Servi's pending approvals (pending only). | `approvals:read` |
+| `approve_approval` | Approve a pending approval. Needs a person to confirm. | `approvals:write` |
+| `reject_approval` | Reject a pending approval. Needs a person to confirm. | `approvals:write` |
 | `list_forms` | Paginate form templates. | `forms:read` |
 | `get_form` | Form template + its field schema. | `forms:read` |
 | `list_form_responses` | Paginate responses for a template. | `forms:read` |
 | `submit_form` | Submit a new form response. | `forms:write` |
 
-**Pagination** for standard list tools accepts `limit` (1-100, default 25) and the `next_cursor` from the previous page's response. Reference lists accept 1–200 records (default 100). Keep the last complete catalog until the new snapshot reaches a null cursor. If a cursor expires, restart at the first page.
+**Approvals need a person.** `approve_approval` and `reject_approval` make Servico act for real (text a customer, email a supplier, mark a task done), so the AI cannot decide on its own. Before any API call the server asks you through your client's confirmation prompt (MCP elicitation) and waits for an explicit yes. If your client does not support confirmation prompts, or you answer no, decline or cancel, nothing is sent to Servico and the tool returns an error. In that case decide the approval in Servico itself. Tool descriptions say this too, so the model knows it cannot self-approve.
+
+The same prompt guards `override: true` on `create_time_block` and `update_time_block`: booking over a conflicting task or meeting is sent only after a person says yes.
+
+**Not exposed on purpose:** creating or editing quotes and invoices, recording payments, marking an invoice sent, product prices, whole-job schedule changes (anchor date, preview, auto-arrange), deleting tasks or time blocks, the project agent routes and inbound webhooks.
+
+**Pagination** for standard list tools accepts `limit` (1-100, default 25) and the `next_cursor` from the previous page's response. `list_catalogue_products` pages by `page` and `limit` (up to 200) and returns `total`. Reference lists accept 1–200 records (default 100). Keep the last complete catalog until the new snapshot reaches a null cursor. If a cursor expires, restart at the first page.
 
 **Writes** auto-generate an idempotency key (UUID v4) if you don't pass one (expense writes require you to supply one). Keys are 16-64 characters from `A-Za-z0-9_-`. To re-try safely or to dedupe across retries, supply `idempotency_key` yourself.
 
@@ -195,7 +229,7 @@ Development:
 git clone https://github.com/atlatowlie/servicocli-mcp
 cd servicocli-mcp
 npm ci
-npm test           # 81 tests, ~2s
+npm test
 npm run lint
 npm run audit:high
 npm run pack:check

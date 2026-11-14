@@ -5,7 +5,9 @@
  * itself also supports invoice writes and payments; they are not exposed
  * here).
  *
- * Scope: invoices:read
+ * Payments are readable (payments:read); recording one is not exposed.
+ *
+ * Scopes: invoices:read, payments:read
  */
 
 import { apiRequest } from '../apiClient.js';
@@ -51,6 +53,49 @@ export const tools = [
       return apiRequest({
         method: 'GET',
         path: `/invoices/${encodeURIComponent(args.id)}`,
+      });
+    },
+  },
+
+  {
+    name: 'list_invoice_payments',
+    description:
+      'List the payments recorded on an invoice (not paginated). Read-only here; ' +
+      'this server does not record payments.',
+    scope: 'payments:read',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string', minLength: 1, description: 'Invoice UUID.' },
+      },
+    },
+    async handler(args) {
+      return apiRequest({
+        method: 'GET',
+        path: `/invoices/${encodeURIComponent(args.id)}/payments`,
+      });
+    },
+  },
+
+  {
+    name: 'get_invoice_payment',
+    description: 'Fetch one payment on an invoice.',
+    scope: 'payments:read',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id', 'payment_id'],
+      properties: {
+        id: { type: 'string', minLength: 1, description: 'Invoice UUID.' },
+        payment_id: { type: 'string', minLength: 1, description: 'Payment id.' },
+      },
+    },
+    async handler(args) {
+      return apiRequest({
+        method: 'GET',
+        path: `/invoices/${encodeURIComponent(args.id)}/payments/${encodeURIComponent(args.payment_id)}`,
       });
     },
   },

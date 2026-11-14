@@ -446,6 +446,10 @@ async function attemptOnce({ method, path, url, body, headers, binary, apiKey, t
         request_id: requestId,
       };
     }
+    // Page-number lists (GET /catalogue/products) report total/page/limit.
+    if (typeof meta.total === 'number') {
+      return { data, total: meta.total, page: meta.page, limit: meta.limit, request_id: requestId };
+    }
     return { data, request_id: requestId };
   }
 
