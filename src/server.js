@@ -98,6 +98,8 @@ export function visibleTools(registry, context) {
   });
 }
 
+const CONTEXT_CACHE_MS = 60_000;
+
 export function createServer({ registry } = {}) {
   const reg = registry || buildRegistry();
   const server = new Server(
@@ -112,9 +114,33 @@ export function createServer({ registry } = {}) {
     }
   );
 
+  // /me is read on every tools/list to filter by scope. Cache a success
+  // briefly so hosts that re-list often do not spend a request each time.
+  let cachedContext = null;
+  let cachedAt = 0;
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const context = await reg.get('get_api_context')?.handler();
-    const available = visibleTools(reg, context?.data);
+    let available;
+    const now = Date.now();
+    if (cachedContext && now - cachedAt < CONTEXT_CACHE_MS) {
+      available = visibleTools(reg, cachedContext);
+    } else {
+      try {
+        const context = await reg.get('get_api_context')?.handler();
+        cachedContext = context?.data || null;
+        cachedAt = now;
+        available = visibleTools(reg, cachedContext);
+      } catch (err) {
+        // Bad key, API not enabled, network down: still list get_api_context so
+        // the agent can call it and read the real error, instead of the host
+        // showing no tools and no reason.
+        cachedContext = null;
+        process.stderr.write(
+          `[servicocli-mcp] tools/list: could not read /me: ${err.message || err}\n`
+        );
+        available = Array.from(reg.values()).filter((t) => t.name === 'get_api_context');
+      }
+    }
     return {
       tools: available.map((t) => ({
         name: t.name,

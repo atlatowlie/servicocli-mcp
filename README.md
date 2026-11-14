@@ -142,6 +142,18 @@ Treat your API key like a password. Use the smallest set of scopes that lets the
 | `SERVICO_API_KEY` | yes | — | `sk_live_…` or `sk_test_…` |
 | `SERVICO_API_BASE` | no | `https://app.servicocrm.com/api/v1` | Override for sandbox/staging |
 | `SERVICO_TIMEOUT_MS` | no | `30000` | Per-request timeout in ms |
+| `SERVICO_MAX_RETRIES` | no | `3` | Automatic retries after the first attempt. `0` turns retry off. |
+| `SERVICO_RETRY_BUDGET_MS` | no | `45000` | Total time one tool call may spend waiting to retry. `0` turns retry off. |
+
+### Automatic retry
+
+The client retries by itself, so an agent call does not fail on a short hiccup:
+
+- **Retried:** HTTP 429 `rate_limited` (the per-minute limit), HTTP 425 `request_in_progress`, and, when safe, network errors, timeouts and HTTP 502/503/504.
+- **Never retried:** 429 `quota_exceeded` and `daily_limit_reached` (waiting seconds does not help; the error says when it resets), any other 4xx, HTTP 500 (the outcome is unknown) and `upload_expense_attachment` after an unclear failure.
+- **Safe means:** reads (GET) always; a write (POST/PATCH/PUT/DELETE) only when it carries an `Idempotency-Key`, and every attempt sends the same key, so the API replays the first result instead of doing the work twice. A 425 means the first attempt with that key is still running; the client waits and asks again with the same key.
+- **Timing:** the `Retry-After` header (seconds or a date) is honoured. If it is longer than 20 s, or does not fit in the time budget, the client does not wait and returns the error ("retry after N s") at once. With no header it backs off exponentially with full jitter (500 ms, 1 s, 2 s, up to 20 s).
+- After the last attempt the final error is returned with "gave up after N attempts".
 
 ---
 

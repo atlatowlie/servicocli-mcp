@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import { callTool } from './_helpers.js';
 import { buildRegistry, visibleTools } from '../src/server.js';
+import { ApiClientError } from '../src/apiClient.js';
 
 test('buildRegistry: gathers all tools from every module', () => {
   const reg = buildRegistry();
@@ -99,5 +100,34 @@ test('expense tools require an explicit scope and send writes with a stable retr
     assert.equal(recorded.method, 'POST');
     assert.equal(recorded.headers['idempotency-key'], idem);
     assert.equal(recorded.body.amount, args.amount);
+  }
+});
+
+test('tools/list falls back to get_api_context when /me fails, and caches a success', async () => {
+  const { createServer } = await import('../src/server.js');
+  const listTools = async (server) =>
+    (await server._requestHandlers.get('tools/list')({ method: 'tools/list', params: {} })).tools.map(t => t.name);
+  let calls = 0;
+  let fail = true;
+  const reg = buildRegistry();
+  const orig = reg.get('get_api_context');
+  reg.set('get_api_context', { ...orig, handler() {
+    calls += 1;
+    if (fail) throw new ApiClientError({ code: 'invalid_api_key', message: 'bad key', status: 401 });
+    return { data: { scopes: ['*'] } };
+  } });
+  const server = createServer({ registry: reg });
+  const origWrite = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    assert.deepEqual(await listTools(server), ['get_api_context']);
+    assert.deepEqual(await listTools(server), ['get_api_context']); // failure is not cached
+    assert.equal(calls, 2);
+    fail = false;
+    assert.ok((await listTools(server)).length > 1);
+    await listTools(server);
+    assert.equal(calls, 3); // success cached
+  } finally {
+    process.stderr.write = origWrite;
   }
 });

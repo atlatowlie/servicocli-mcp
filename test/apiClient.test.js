@@ -10,6 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { FormData } from 'undici';
 
 import {
   apiRequest, getApiKey, getApiBase, getTimeoutMs, ApiClientError, __internal,
@@ -413,6 +414,185 @@ test('apiRequest: caller-supplied headers reach the server', async () => {
     });
   });
   assert.equal(seenIdem, 'abc-123-defghijklmno');
+});
+
+// ─── Retry with back-off ──────────────────────────────────────────────
+
+/** Server that replies from a script, one entry per request; records headers. */
+function scripted(steps) {
+  const seen = [];
+  const handler = (req, res) => {
+    seen.push({ method: req.method, headers: req.headers });
+    const step = steps[Math.min(seen.length - 1, steps.length - 1)];
+    res.statusCode = step.status;
+    res.setHeader('content-type', 'application/json');
+    for (const [k, v] of Object.entries(step.headers || {})) res.setHeader(k, v);
+    res.end(JSON.stringify(step.body || { data: { ok: true }, meta: { request_id: 'r' } }));
+  };
+  return { seen, handler };
+}
+const errBody = (code) => ({ error: { code, message: code } });
+function sleeper() {
+  const waits = [];
+  return { waits, sleep: async (ms) => { waits.push(ms); } };
+}
+const retryEnv = (base, extra = {}) => ({ SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base, ...extra });
+
+test('retry: 429 rate_limited then 200 waits Retry-After once', async () => {
+  const { seen, handler } = scripted([
+    { status: 429, headers: { 'retry-after': '3' }, body: errBody('rate_limited') },
+    { status: 200 },
+  ]);
+  const s = sleeper();
+  await withServer(handler, async (base) => {
+    const out = await apiRequest({ method: 'GET', path: '/customers', env: retryEnv(base), sleep: s.sleep });
+    assert.deepEqual(out.data, { ok: true });
+  });
+  assert.equal(seen.length, 2);
+  assert.deepEqual(s.waits, [3000]);
+});
+
+test('retry: 429 quota_exceeded and daily_limit_reached are surfaced at once', async () => {
+  for (const code of ['quota_exceeded', 'daily_limit_reached']) {
+    const { seen, handler } = scripted([
+      { status: 429, headers: { 'retry-after': '3600' }, body: errBody(code) },
+    ]);
+    const s = sleeper();
+    await withServer(handler, async (base) => {
+      await assert.rejects(
+        apiRequest({ method: 'GET', path: '/customers', env: retryEnv(base), sleep: s.sleep }),
+        (e) => e.code === code && e.retryAfter === 3600 && /retry after 3600 s/.test(e.message));
+    });
+    assert.equal(seen.length, 1);
+    assert.equal(s.waits.length, 0);
+  }
+});
+
+test('retry: GET 503, 503, 200 succeeds after 2 retries with back-off', async () => {
+  const { seen, handler } = scripted([{ status: 503 }, { status: 503 }, { status: 200 }]);
+  const s = sleeper();
+  await withServer(handler, async (base) => {
+    const out = await apiRequest({
+      method: 'GET', path: '/customers', env: retryEnv(base), sleep: s.sleep, random: () => 0.5,
+    });
+    assert.deepEqual(out.data, { ok: true });
+  });
+  assert.equal(seen.length, 3);
+  assert.deepEqual(s.waits, [250, 500]); // full jitter: 0.5 * (500, 1000)
+});
+
+test('retry: POST without Idempotency-Key is not retried after 503', async () => {
+  const { seen, handler } = scripted([{ status: 503 }, { status: 200 }]);
+  const s = sleeper();
+  await withServer(handler, async (base) => {
+    await assert.rejects(
+      apiRequest({ method: 'POST', path: '/customers', body: {}, env: retryEnv(base), sleep: s.sleep }),
+      (e) => e.status === 503 && !/attempts/.test(e.message));
+  });
+  assert.equal(seen.length, 1);
+});
+
+test('retry: POST with key retries 503 with the identical key', async () => {
+  const { seen, handler } = scripted([{ status: 503 }, { status: 200 }]);
+  const s = sleeper();
+  await withServer(handler, async (base) => {
+    await apiRequest({
+      method: 'POST', path: '/customers', body: {}, headers: { 'Idempotency-Key': 'key-1234567890abcdef' },
+      env: retryEnv(base), sleep: s.sleep,
+    });
+  });
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0].headers['idempotency-key'], 'key-1234567890abcdef');
+  assert.equal(seen[1].headers['idempotency-key'], 'key-1234567890abcdef');
+});
+
+test('retry: 425 request_in_progress then 200 retries with the same key', async () => {
+  const { seen, handler } = scripted([
+    { status: 425, headers: { 'retry-after': '1' }, body: errBody('request_in_progress') },
+    { status: 200 },
+  ]);
+  const s = sleeper();
+  await withServer(handler, async (base) => {
+    await apiRequest({
+      method: 'POST', path: '/invoices', body: {}, headers: { 'Idempotency-Key': 'key-1234567890abcdef' },
+      env: retryEnv(base), sleep: s.sleep,
+    });
+  });
+  assert.deepEqual(s.waits, [1000]);
+  assert.equal(seen[1].headers['idempotency-key'], 'key-1234567890abcdef');
+});
+
+test('retry: uploads and 500 are never retried; other 4xx neither', async () => {
+  for (const [status, body] of [[500, undefined], [404, errBody('not_found')]]) {
+    const { seen, handler } = scripted([{ status, body }, { status: 200 }]);
+    await withServer(handler, async (base) => {
+      await assert.rejects(apiRequest({
+        method: 'GET', path: '/x', env: retryEnv(base), sleep: sleeper().sleep,
+      }));
+    });
+    assert.equal(seen.length, 1);
+  }
+  const { seen, handler } = scripted([{ status: 503 }, { status: 200 }]);
+  await withServer(handler, async (base) => {
+    await assert.rejects(apiRequest({
+      method: 'POST', path: '/expenses/e/attachments', body: new FormData(),
+      headers: { 'Idempotency-Key': 'key-1234567890abcdef' },
+      env: retryEnv(base), sleep: sleeper().sleep,
+    }), (e) => e.status === 503);
+  });
+  assert.equal(seen.length, 1);
+});
+
+test('retry: Retry-After beyond the budget fails without sleeping', async () => {
+  const { seen, handler } = scripted([
+    { status: 429, headers: { 'retry-after': '15' }, body: errBody('rate_limited') },
+    { status: 200 },
+  ]);
+  const s = sleeper();
+  await withServer(handler, async (base) => {
+    await assert.rejects(
+      apiRequest({ method: 'GET', path: '/x', env: retryEnv(base, { SERVICO_RETRY_BUDGET_MS: '5000' }), sleep: s.sleep }),
+      (e) => e.status === 429 && /retry after 15 s/.test(e.message));
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(s.waits.length, 0);
+});
+
+test('retry: gives up after SERVICO_MAX_RETRIES and notes the attempts', async () => {
+  const { seen, handler } = scripted([{ status: 503 }]);
+  await withServer(handler, async (base) => {
+    await assert.rejects(
+      apiRequest({ method: 'GET', path: '/x', env: retryEnv(base, { SERVICO_MAX_RETRIES: '2' }), sleep: sleeper().sleep }),
+      (e) => e.status === 503 && e.attempts === 3 && /gave up after 3 attempts/.test(e.message));
+  });
+  assert.equal(seen.length, 3);
+});
+
+test('retry: SERVICO_MAX_RETRIES=0 and SERVICO_RETRY_BUDGET_MS=0 disable retry', async () => {
+  for (const extra of [{ SERVICO_MAX_RETRIES: '0' }, { SERVICO_RETRY_BUDGET_MS: '0' }]) {
+    const { seen, handler } = scripted([{ status: 503 }, { status: 200 }]);
+    await withServer(handler, async (base) => {
+      await assert.rejects(
+        apiRequest({ method: 'GET', path: '/x', env: retryEnv(base, extra), sleep: sleeper().sleep }),
+        (e) => e.status === 503);
+    });
+    assert.equal(seen.length, 1);
+  }
+});
+
+test('retry: GET network error is retried, POST without key is not', async () => {
+  // Nothing listens on this port: connection refused on every attempt.
+  const env = retryEnv('http://127.0.0.1:1/api/v1', { SERVICO_MAX_RETRIES: '1' });
+  const s = sleeper();
+  await assert.rejects(
+    apiRequest({ method: 'GET', path: '/x', env, sleep: s.sleep, random: () => 0.5 }),
+    (e) => e.code === 'NETWORK_ERROR' && e.attempts === 2);
+  assert.equal(s.waits.length, 1);
+  const s2 = sleeper();
+  await assert.rejects(
+    apiRequest({ method: 'POST', path: '/x', body: {}, env, sleep: s2.sleep }),
+    (e) => e.code === 'NETWORK_ERROR');
+  assert.equal(s2.waits.length, 0);
 });
 
 // ─── Internal constants sanity ─────────────────────────────────────────
