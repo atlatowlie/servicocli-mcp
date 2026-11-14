@@ -1,8 +1,9 @@
 /**
  * tools/invoices.js — read-only invoice tools.
  *
- * Invoices are read-only in v1 of the Servico API. Creation flows live
- * in the Servico app (quote → invoice conversion, job billing, etc.).
+ * This MCP server exposes read tools only for invoices (the Servico API
+ * itself also supports invoice writes and payments; they are not exposed
+ * here).
  *
  * Scope: invoices:read
  */
@@ -14,7 +15,8 @@ export const tools = [
     name: 'list_invoices',
     description:
       'List invoices in your tenant (paginated). Includes status, amounts ' +
-      '(subtotal, tax, total, paid, due), and the linked quote/job ids.',
+      '(subtotal, tax, total, paid, due), and the linked quote/job ids. Read-only here — this MCP ' +
+      'server does not create or edit invoices.',
     scope: 'invoices:read',
     inputSchema: {
       type: 'object',

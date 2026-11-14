@@ -215,6 +215,96 @@ test('apiRequest: rejects non-JSON content-type', async () => {
   });
 });
 
+test('apiRequest: non-JSON error never echoes body bytes', async () => {
+  await withServer((req, res) => {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'text/html');
+    res.end('SECRET-BODY-CONTENT');
+  }, async (base) => {
+    const env = { SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base };
+    await assert.rejects(
+      () => apiRequest({ method: 'GET', path: '/x', env }),
+      (err) => !/SECRET-BODY/.test(err.message)
+    );
+  });
+});
+
+test('apiRequest: 401 with string error body maps to invalid_api_key', async () => {
+  await withServer((req, res) => {
+    res.statusCode = 401;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'Invalid or expired API key' }));
+  }, async (base) => {
+    const env = { SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base };
+    await assert.rejects(
+      () => apiRequest({ method: 'GET', path: '/me', env }),
+      (err) => err.code === 'invalid_api_key' && err.status === 401
+        && err.message === 'Invalid or expired API key'
+    );
+  });
+});
+
+test('apiRequest: string error on 400 and 418 derives codes from status', async () => {
+  for (const [status, code] of [[400, 'bad_request'], [418, 'http_418']]) {
+    await withServer((req, res) => {
+      res.statusCode = status;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'nope' }));
+    }, async (base) => {
+      const env = { SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base };
+      await assert.rejects(
+        () => apiRequest({ method: 'GET', path: '/x', env }),
+        (err) => err.code === code && err.message === 'nope'
+      );
+    });
+  }
+});
+
+for (const status of [429, 425]) {
+  test(`apiRequest: ${status} surfaces Retry-After header`, async () => {
+    await withServer((req, res) => {
+      res.statusCode = status;
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('retry-after', '7');
+      res.end(JSON.stringify({ error: { code: 'rate_limited', message: 'Slow down' } }));
+    }, async (base) => {
+      const env = { SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base };
+      await assert.rejects(
+        () => apiRequest({ method: 'GET', path: '/x', env }),
+        (err) => err.code === 'rate_limited' && err.retryAfter === 7
+          && /retry after 7 s/.test(err.message)
+      );
+    });
+  });
+}
+
+test('apiRequest: binary accepts any non-JSON type (e.g. Word) and returns base64', async () => {
+  await withServer((req, res) => {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.end(Buffer.from('docbytes'));
+  }, async (base) => {
+    const env = { SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base };
+    const out = await apiRequest({ method: 'GET', path: '/f', binary: true, env });
+    assert.match(out.mime_type, /wordprocessingml/);
+    assert.equal(Buffer.from(out.content_base64, 'base64').toString(), 'docbytes');
+  });
+});
+
+test('apiRequest: binary over the size cap throws invalid_input', async () => {
+  await withServer((req, res) => {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/pdf');
+    res.end(Buffer.alloc(10 * 1024 * 1024 + 1));
+  }, async (base) => {
+    const env = { SERVICO_API_KEY: VALID_KEY, SERVICO_API_BASE: base };
+    await assert.rejects(
+      () => apiRequest({ method: 'GET', path: '/f', binary: true, env }),
+      (err) => err instanceof ApiClientError && err.code === 'invalid_input'
+    );
+  });
+});
+
 // ─── Network error (connection refused) ───────────────────────────────
 
 test('apiRequest: network failure maps to NETWORK_ERROR', async () => {

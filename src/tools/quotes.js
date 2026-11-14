@@ -1,7 +1,8 @@
 /**
  * tools/quotes.js — read-only quote tools.
  *
- * Quotes are read-only in v1 of the Servico API. Use get_quote_line_items
+ * This MCP server exposes read tools only for quotes (the Servico API
+ * itself also supports quote writes; they are not exposed here). Use get_quote_line_items
  * to fetch the line items for a quote (separate call so the list endpoint
  * stays slim — most agents browsing quotes don't need all the line items).
  *
@@ -16,7 +17,7 @@ export const tools = [
     description:
       'List quotes (paginated). Includes status (draft, sent, accepted, ' +
       'rejected, signed), totals, and customer-side denormalized fields. ' +
-      'Read-only — quotes are created in the Servico UI.',
+      'Read-only here — this MCP server does not create or edit quotes.',
     scope: 'quotes:read',
     inputSchema: {
       type: 'object',

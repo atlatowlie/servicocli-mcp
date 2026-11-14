@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { apiRequest } from '../apiClient.js';
+import { IDEMPOTENCY_KEY_SCHEMA } from './_shared.js';
 
 const supplierFields = {
   company_name: { type: 'string', minLength: 1, maxLength: 200 },
@@ -12,7 +13,7 @@ const supplierFields = {
   website: { type: ['string', 'null'] },
   notes: { type: ['string', 'null'] },
   categories: { type: 'array', items: { type: 'string' } },
-  idempotency_key: { type: 'string', minLength: 16, maxLength: 64 },
+  idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
 };
 
 export const tools = [{

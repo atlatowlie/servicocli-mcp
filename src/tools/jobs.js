@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { apiRequest } from '../apiClient.js';
+import { IDEMPOTENCY_KEY_SCHEMA } from './_shared.js';
 
 export const tools = [
   {
@@ -54,7 +55,7 @@ export const tools = [
       properties: {
         id: { type: 'string', minLength: 1 },
         changes: { type: 'object', minProperties: 1, description: 'Job fields accepted by PATCH /jobs/{id}, such as title, address, or status.' },
-        idempotency_key: { type: 'string', minLength: 16, maxLength: 64 },
+        idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
       },
     },
     handler({ id, changes, idempotency_key = randomUUID() }) {

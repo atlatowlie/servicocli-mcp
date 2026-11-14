@@ -1,5 +1,6 @@
 import { Blob } from 'node:buffer';
-import { apiRequest } from '../apiClient.js';
+import { apiRequest, ApiClientError } from '../apiClient.js';
+import { IDEMPOTENCY_KEY_SCHEMA } from './_shared.js';
 
 import { FormData } from 'undici';
 
@@ -10,13 +11,15 @@ const fields = {
   job_id: text, expense_id: text, payment_id: text, description: text, amount: { type: 'number' },
   vendor: text, supplier_id: text, contractor_id: text, invoice_number: text, invoice_date: date, expense_date: date, payment_status: { enum: ['unpaid', 'pending'] },
   payment_method: text, payment_date: date, reference_number: text, notes: text,
-  idempotency_key: { type: 'string', pattern: '^[A-Za-z0-9_-]{16,64}$', description: 'Reuse this key when retrying the same entry.' },
+  idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
 };
 
 function schema(names, required) {
   return { type: 'object', additionalProperties: false, required,
     properties: Object.fromEntries(names.map(name => [name, fields[name]])) };
 }
+
+const invalidInput = message => new ApiClientError({ code: 'invalid_input', message });
 
 const attachments = id => '/expenses/' + encodeURIComponent(id) + '/attachments';
 
@@ -33,7 +36,7 @@ export const tools = [
   {
     name: 'list_contractor_directory', description: 'List contractor IDs, names and maintained invoice aliases.',
     scope: 'expenses:read', explicitScope: true,
-    inputSchema: { type: 'object', additionalProperties: false, properties: { limit: { type: 'integer', minimum: 1 }, offset: { type: 'integer', minimum: 0 } } },
+    inputSchema: { type: 'object', additionalProperties: false, properties: { limit: { type: 'integer', minimum: 1, maximum: 500 }, offset: { type: 'integer', minimum: 0 } } },
     handler(query) { return apiRequest({ method: 'GET', path: '/contractors', query }); },
   },
   {
@@ -53,9 +56,10 @@ export const tools = [
     scope: 'expenses:write', explicitScope: true,
     inputSchema: schema(['expense_id','filename','content_base64','derived_from_file_id'], ['expense_id','filename','content_base64']),
     handler({ expense_id, filename, content_base64, derived_from_file_id }) {
-      if (content_base64.length > 13981016) throw new Error('Attachment exceeds the 10 MiB MCP transfer limit.');
+      if (content_base64.length > 13981016) throw invalidInput('Attachment exceeds the 10 MiB MCP transfer limit.');
       const bytes = Buffer.from(content_base64, 'base64');
-      if (bytes.length > 10 * 1024 * 1024 || bytes.toString('base64') !== content_base64) throw new Error('Invalid attachment data.');
+      if (bytes.length > 10 * 1024 * 1024) throw invalidInput('Attachment exceeds the 10 MiB MCP transfer limit.');
+      if (bytes.toString('base64') !== content_base64) throw invalidInput('content_base64 is not valid canonical base64 data.');
       const body = new FormData();
       if (derived_from_file_id) body.append('derived_from_file_id', derived_from_file_id);
       body.append('file', new Blob([bytes]), filename);

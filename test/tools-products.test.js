@@ -47,10 +47,9 @@ test('update_product: PATCH with integer id', async () => {
   assert.equal(recorded.body.sale_price, 99.5);
 });
 
-test('create_product input schema enumerates item_type values', () => {
-  const t = byName('create_product');
-  assert.deepEqual(
-    t.inputSchema.properties.item_type.enum,
-    ['product', 'supply', 'labor', 'equipment'],
-  );
+test('create_product item_type is a free string (tenant-configurable), no default', () => {
+  const p = byName('create_product').inputSchema.properties.item_type;
+  assert.equal(p.type, 'string');
+  assert.equal(p.enum, undefined);
+  assert.equal(p.default, undefined);
 });

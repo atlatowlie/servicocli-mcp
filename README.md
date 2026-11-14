@@ -8,6 +8,8 @@ It runs on your machine as a subprocess of the agent. Your Servico API key never
 
 ## Install
 
+Requires **Node.js 22.19 or newer** (the pinned HTTP client, undici 8, needs it).
+
 You don't have to clone or build anything — `npx` runs the latest published version:
 
 ```bash
@@ -88,7 +90,7 @@ Restart Cursor.
 | `get_quote_line_items` | Line items for a quote. | `quotes:read` |
 | `list_invoices` | Paginate invoices. | `invoices:read` |
 | `get_invoice` | Fetch one invoice. | `invoices:read` |
-| `list_jobs_references` | Page through job references. | `jobs:read` and Expense Management |
+| `list_jobs_references` | Page through job references. | `jobs:references:read` or `jobs:read`, and Expense Management |
 | `list_suppliers_references` | Page through supplier references. | `suppliers:read` and Expense Management |
 | `list_contractor_directory` | List contractor IDs, names and maintained aliases. | `expenses:read` and contractor visibility |
 | `list_expense_attachments` | List filenames, IDs and original fingerprints. | `expenses:read` |
@@ -114,7 +116,7 @@ Restart Cursor.
 
 **Pagination** for standard list tools accepts `limit` (1-100, default 25) and the `next_cursor` from the previous page's response. Reference lists accept 1–200 records (default 100). Keep the last complete catalog until the new snapshot reaches a null cursor. If a cursor expires, restart at the first page.
 
-**Writes** auto-generate an idempotency key (UUID v4) if you don't pass one. To re-try safely or to dedupe across retries, supply `idempotency_key` yourself.
+**Writes** auto-generate an idempotency key (UUID v4) if you don't pass one (expense writes require you to supply one). Keys are 16-64 characters from `A-Za-z0-9_-`. To re-try safely or to dedupe across retries, supply `idempotency_key` yourself.
 
 ---
 
@@ -124,7 +126,7 @@ This server is a **local client**. It does not add new attack surface to your Se
 
 1. **No shared state.** Every user runs their own subprocess, with their own API key, in their own environment. There is no central server hosting any user's credentials.
 2. **API key never leaves your machine.** It travels from `process.env.SERVICO_API_KEY` → `Authorization: Bearer` header → Servico's API. Nothing else reads it. Logs that go to stderr never include the key.
-3. **HTTPS-only outbound.** Non-HTTPS bases are rejected, except for `localhost`/`127.0.0.1` for local development. Redirects are disabled (max=0) so a malicious DNS response cannot exfiltrate the key to a third party.
+3. **HTTPS-only outbound.** Non-HTTPS bases are rejected, except for `localhost`/`127.0.0.1` for local development. Redirects are never followed (the client uses manual redirect handling and rejects any 3xx) so a malicious DNS response cannot exfiltrate the key to a third party.
 4. **JSON-only.** Non-JSON responses (e.g. HTML captive portal pages) are rejected rather than silently parsed.
 5. **No `postinstall`, no telemetry, no analytics.** Pinned versions in `package-lock.json`; CI fails on lockfile drift.
 6. **Server-side scopes** are enforced by Servico — even if the local client misbehaves, an unscoped key cannot do unscoped things.
@@ -151,17 +153,17 @@ The agent didn't pass the key through. Re-check the `env` block in your MCP conf
 **`config_error: SERVICO_API_KEY appears malformed`**
 The expected format is `sk_(live|test)_<32 chars>_<4 hex>`. Check for stray whitespace or copy-paste artifacts (curly quotes, line breaks).
 
-**`401 invalid_api_key`**
+**`[invalid_api_key] Invalid or expired API key` (HTTP 401)**
 The key is well-formed but Servico doesn't recognize it. It may have been revoked, or you may be pointing at the wrong tenant. Generate a fresh key.
 
 **`403 insufficient_scope`**
 The tool needs a scope your key wasn't created with. Either grant the scope on the existing key, or mint a new key with the broader scope set. See the table above.
 
 **`404 not_found`**
-The resource doesn't exist in your tenant, OR your tenant doesn't have `api_v1_enabled` turned on. Contact Servico support to opt in.
+The resource doesn't exist in your tenant, OR your tenant doesn't have the API enabled. A company admin can turn it on in **Settings → API keys**.
 
 **`429 rate_limited`**
-You exceeded the per-tenant API rate limit. Slow down or wait — the API returns `retry-after` in the error payload.
+You exceeded the per-tenant API rate limit. Slow down or wait — the API sends a `Retry-After` header (also on 425 responses), which the error message surfaces as "retry after N s".
 
 **`PROTOCOL_ERROR: Expected application/json … but got text/html`**
 You're not talking to the API. Check `SERVICO_API_BASE` — most often this means you pointed at the marketing site or a captive portal.
@@ -181,7 +183,7 @@ Development:
 git clone https://github.com/atlatowlie/servicocli-mcp
 cd servicocli-mcp
 npm ci
-npm test           # 58 tests, ~2s
+npm test           # 81 tests, ~2s
 npm run lint
 npm run audit:high
 npm run pack:check
