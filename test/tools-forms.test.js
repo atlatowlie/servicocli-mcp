@@ -55,6 +55,16 @@ test('submit_form: ref_type enum is enforced by the schema', () => {
   const t = byName('submit_form');
   assert.deepEqual(
     t.inputSchema.properties.ref_type.enum,
-    ['job', 'customer', 'contractor'],
+    ['job', 'customer', 'contractor', 'meeting'],
   );
+});
+
+test('submit_form: status and response_id pass through into the body', async () => {
+  const { recorded } = await callTool(byName('submit_form'), {
+    form_id: 'f1', ref_type: 'meeting', ref_id: 'm1', status: 'draft', response_id: 'r1', values: { a: 1 },
+  });
+  assert.equal(recorded.url, '/api/v1/forms/f1/submissions');
+  assert.equal(recorded.body.status, 'draft');
+  assert.equal(recorded.body.response_id, 'r1');
+  assert.equal(recorded.body.ref_type, 'meeting');
 });

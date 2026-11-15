@@ -11,6 +11,7 @@
  */
 
 import { apiRequest } from '../apiClient.js';
+import { IDEMPOTENCY_KEY_SCHEMA } from './_shared.js';
 
 const PAGINATION_PROPS = {
   cursor: { type: 'string', description: 'Opaque pagination cursor.' },
@@ -62,8 +63,11 @@ export const tools = [
     name: 'create_product',
     description:
       'Create a catalog product. `name` and `category` are required. Numeric ' +
-      'fields default to sensible values (cost=0, multiplier_min=2.3, etc.). ' +
-      'item_type defaults to "product"; valid values: product, supply, labor, equipment. ' +
+      'fields default to sensible values (cost=0, etc.); multiplier_min ' +
+      'defaults to 1.8 for the Windows, Roofing, Insulation and Siding ' +
+      'categories and 2.3 for all others. `item_type` must be one of your ' +
+      'tenant\'s configured item types (a 400 response lists them) and is ' +
+      'required unless the tenant has configured a default item type. ' +
       'Requires products:write scope.',
     scope: 'products:write',
     inputSchema: {
@@ -78,13 +82,15 @@ export const tools = [
         unit: { type: 'string', maxLength: 20, default: 'pcs' },
         item_type: {
           type: 'string',
-          enum: ['product', 'supply', 'labor', 'equipment'],
-          default: 'product',
+          minLength: 1,
+          description:
+            'One of the tenant\'s configured item types (the API 400 lists ' +
+            'them). Required unless the tenant configured a default item type.',
         },
         multiplier_min: { type: 'number', minimum: 0 },
         min_price: { type: 'number', minimum: 0 },
         sale_price: { type: 'number', minimum: 0 },
-        idempotency_key: { type: 'string', minLength: 16, maxLength: 200 },
+        idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
       },
     },
     async handler(args) {
@@ -116,11 +122,15 @@ export const tools = [
         category: { type: 'string', minLength: 1, maxLength: 100 },
         cost: { type: 'number', minimum: 0 },
         unit: { type: 'string', minLength: 1, maxLength: 20 },
-        item_type: { type: 'string', enum: ['product', 'supply', 'labor', 'equipment'] },
+        item_type: {
+          type: 'string',
+          minLength: 1,
+          description: 'One of the tenant\'s configured item types (the API 400 lists them).',
+        },
         multiplier_min: { type: 'number', minimum: 0 },
         min_price: { type: 'number', minimum: 0 },
         sale_price: { type: 'number', minimum: 0 },
-        idempotency_key: { type: 'string', minLength: 16, maxLength: 200 },
+        idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
       },
     },
     async handler(args) {

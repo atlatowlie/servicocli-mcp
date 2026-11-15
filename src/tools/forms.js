@@ -14,6 +14,7 @@
  */
 
 import { apiRequest } from '../apiClient.js';
+import { IDEMPOTENCY_KEY_SCHEMA } from './_shared.js';
 
 export const tools = [
   {
@@ -93,7 +94,7 @@ export const tools = [
       'Submit a new form response. Required-field validation runs server-side ' +
       'against the template definition; unknown field keys in `values` are ' +
       'silently ignored (the form definition is the contract). `ref_type` ' +
-      'must be one of: job, customer, contractor, and the `ref_id` must ' +
+      'must be one of: job, customer, contractor, meeting, and the `ref_id` must ' +
       'belong to your tenant. Requires forms:write scope.',
     scope: 'forms:write',
     inputSchema: {
@@ -104,13 +105,29 @@ export const tools = [
         form_id: { type: 'string', minLength: 1, description: 'Form template UUID.' },
         ref_type: {
           type: 'string',
-          enum: ['job', 'customer', 'contractor'],
-          description: 'The kind of entity this submission references.',
+          enum: ['job', 'customer', 'contractor', 'meeting'],
+          description:
+            'The kind of entity this submission references. A `meeting` ' +
+            'referent is a meeting debrief (one per meeting; a second one ' +
+            'is refused with 409 already_debriefed).',
         },
         ref_id: {
           type: 'string',
           minLength: 1,
-          description: 'The id of the referenced job/customer/contractor.',
+          description: 'The id of the referenced job/customer/contractor/meeting.',
+        },
+        status: {
+          type: 'string',
+          enum: ['draft', 'submitted'],
+          description: 'Defaults to "submitted" when omitted. Use "draft" to save without submitting.',
+        },
+        response_id: {
+          type: ['string', 'null'],
+          minLength: 1,
+          maxLength: 200,
+          description:
+            'Id of an existing DRAFT response to update/promote in place ' +
+            '(for example to submit a saved draft). Omit to create a new response.',
         },
         values: {
           type: 'object',
@@ -120,12 +137,7 @@ export const tools = [
             'depending on the field_type defined in the template.',
           additionalProperties: true,
         },
-        idempotency_key: {
-          type: 'string',
-          minLength: 16,
-          maxLength: 200,
-          description: 'If omitted, a UUID is generated client-side.',
-        },
+        idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
       },
     },
     async handler(args) {

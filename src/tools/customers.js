@@ -13,6 +13,7 @@
  */
 
 import { apiRequest } from '../apiClient.js';
+import { IDEMPOTENCY_KEY_SCHEMA } from './_shared.js';
 
 /** Shared cursor/limit shape for list endpoints. */
 const PAGINATION_PROPS = {
@@ -95,15 +96,7 @@ export const tools = [
         phone: { type: 'string', maxLength: 40, description: 'Will be normalized to E.164.' },
         address: { type: 'string', maxLength: 500 },
         status: { type: 'string', enum: ['active', 'inactive'], default: 'active' },
-        idempotency_key: {
-          type: 'string',
-          minLength: 16,
-          maxLength: 200,
-          description:
-            'Idempotency-Key for the write. Strongly recommended — replays ' +
-            'with the same key return the cached response. If omitted, ' +
-            'a UUID is generated client-side.',
-        },
+        idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
       },
     },
     async handler(args) {
@@ -136,7 +129,7 @@ export const tools = [
         phone: { type: ['string', 'null'], maxLength: 40 },
         address: { type: ['string', 'null'], maxLength: 500 },
         status: { type: 'string', enum: ['active', 'inactive'] },
-        idempotency_key: { type: 'string', minLength: 16, maxLength: 200 },
+        idempotency_key: IDEMPOTENCY_KEY_SCHEMA,
       },
     },
     async handler(args) {

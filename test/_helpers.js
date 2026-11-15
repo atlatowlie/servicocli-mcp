@@ -70,13 +70,14 @@ export function assertValidToolSchema(schema, toolName) {
  * process.env by default — and tool handlers don't accept an env arg.
  */
 export async function callTool(tool, args, opts = {}) {
-  const srv = await recordingServer(opts);
+  const { ctx, ...serverOpts } = opts;
+  const srv = await recordingServer(serverOpts);
   const prevKey = process.env.SERVICO_API_KEY;
   const prevBase = process.env.SERVICO_API_BASE;
   process.env.SERVICO_API_KEY = VALID_KEY;
   process.env.SERVICO_API_BASE = srv.base;
   try {
-    const out = await tool.handler(args);
+    const out = await tool.handler(args, ctx);
     return { out, recorded: srv.recorded };
   } finally {
     if (prevKey === undefined) delete process.env.SERVICO_API_KEY;
